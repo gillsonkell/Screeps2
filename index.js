@@ -186,10 +186,22 @@ for (const spawn of spawns) {
 					}
 				}
 
+				if (sourceFlag.room) {
+					spawn.enemySighted = sourceFlag.pos.findClosestByRange(FIND_HOSTILE_CREEPS);
+				}
+
 				new RoomVisual(sourceFlag.pos.roomName).text(`W${sourceFlag.harvesterWorkPartsNeeded} C${sourceFlag.carrierCarryPartsNeeded}`, sourceFlag.pos.x, sourceFlag.pos.y + 2);
 			} catch (error) {
 				console.log(error.stack);
 			}
+		}
+
+		if (spawn.enemySighted) {
+			const attack = Math.floor(spawn.room.energyCapacityAvailable / (BODYPART_COST[ATTACK] + BODYPART_COST[MOVE]));
+			spawn.queue.push({
+				type: 'd',
+				body: getBody({attack, move: attack})
+			});
 		}
 
 		if (spawn.name === '1') {
@@ -353,11 +365,13 @@ for (const spawn of spawns) {
 			}
 			const identifier = idParts.join(',');
 
+			/*
 			const creepLifeTime = (creep.body.indexOf(CLAIM) === -1 ? CREEP_LIFE_TIME : CREEP_CLAIM_LIFE_TIME);
 			if (Memory.creepsSpawned[spawn.name][identifier] && Memory.creepsSpawned[spawn.name][identifier] + creepLifeTime - backupTime > Game.time) {
 				continue;
 			}
-
+			*/
+			
 			if (spawn.creeps.find(creep => creep.identifier === identifier && creep.ticks > backupTime)) {
 				continue;
 			}
@@ -513,6 +527,34 @@ for (const spawn of spawns) {
 							}
 						} else {
 							move(creep, spawnFlag, {maxOps: 10000});
+						}
+					}
+				}
+
+				if (creep.type === 'd') {
+					if (creep.hits < creep.hitsMax * .75) {
+						creep.memory.healing = true;
+					} else if (creep.hits === creep.hitsMax) {
+						creep.memory.healing = false;
+					}
+					creep.healing = creep.memory.healing;
+
+					const enemy = creep.pos.findClosestByRange(FIND_HOSTILE_CREEPS);
+					if (enemy) {
+						creep.attack(enemy);
+					}
+
+					if (creep.healing) {
+						move(creep, spawn.room.controller);
+					} else {
+						if (spawn.enemySighted) {
+							if (creep.room === spawn.enemySighted) {
+								if (enemy) {
+									move(creep, enemy);
+								}
+							} else {
+								move(creep, spawn.enemySighted);
+							}
 						}
 					}
 				}
