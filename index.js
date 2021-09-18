@@ -205,30 +205,23 @@ for (const spawn of spawns) {
 		}
 
 		if (spawn.name === '1') {
-			const myRooms = Object.values(Game.rooms).filter(room => room.controller && room.controller.my).length;
-			if (myRooms < Game.gcl.level && spawn.room.energyCapacityAvailable >= 1300) {
-				let spawnFlag;
-				let spawnName;
-				for (let i = 0; i < 10; i++) {
-					spawnFlag = Game.flags[`a ${i}`];
-					spawnName = i.toString();
-					if (spawnFlag && !Game.spawns[spawnName]) {
-						break;
-					} else {
-						spawnFlag = null;
-						spawnName = null;
-					}
+			let spawnFlag;
+			let spawnName;
+			for (let i = 0; i < 10; i++) {
+				spawnFlag = Game.flags[`a ${i}`];
+				spawnName = i.toString();
+				if (spawnFlag && !Game.spawns[spawnName]) {
+					break;
+				} else {
+					spawnFlag = null;
+					spawnName = null;
 				}
+			}
 
-				if (spawnFlag) {
-					if (!spawnFlag.room || !spawnFlag.room.controller.my) {
-						spawn.queue.push({
-							type: 'a',
-							body: [MOVE, CLAIM],
-							memory: {
-								spawnFlag: spawnFlag.name
-							}
-						});
+			if (spawnFlag) {
+				if (spawnFlag.room && spawnFlag.room.controller.my) {
+					if (!spawnFlag.room.find(FIND_MY_STRUCTURES, {filter: structure => structure.structureType === STRUCTURE_SPAWN})[0]) {
+						spawnFlag.pos.createConstructionSite(STRUCTURE_SPAWN, spawnName);
 					}
 
 					for (let i = 0; i < 4; i++) {
@@ -240,11 +233,16 @@ for (const spawn of spawns) {
 							}
 						});
 					}
-
-					if (spawnFlag.room) {
-						if (!spawnFlag.room.find(FIND_MY_STRUCTURES, {filter: structure => structure.structureType === STRUCTURE_SPAWN})[0]) {
-							spawnFlag.pos.createConstructionSite(STRUCTURE_SPAWN, spawnName);
-						}
+				} else {
+					const myRooms = Object.values(Game.rooms).filter(room => room.controller && room.controller.my).length;
+					if (myRooms < Game.gcl.level && spawn.room.energyCapacityAvailable >= 1300) {
+						spawn.queue.push({
+							type: 'a',
+							body: [MOVE, CLAIM],
+							memory: {
+								spawnFlag: spawnFlag.name
+							}
+						});
 					}
 				}
 			}
@@ -371,7 +369,7 @@ for (const spawn of spawns) {
 				continue;
 			}
 			*/
-			
+
 			if (spawn.creeps.find(creep => creep.identifier === identifier && creep.ticks > backupTime)) {
 				continue;
 			}
