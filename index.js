@@ -302,7 +302,7 @@ for (const spawn of spawns) {
 			});
 		}
 
-		if (spawn.name === '1' && spawn.creeps.length < 3) {
+		if (spawn.creeps.length < 3) {
 			const firstHarvesterIndex = spawn.queue.findIndex(creep => creep.type === 'h');
 			const firstHarvester = spawn.queue[firstHarvesterIndex];
 			const firstCarrierIndex = spawn.queue.findIndex(creep => creep.type === 'c');
@@ -509,7 +509,7 @@ for (const spawn of spawns) {
 									}
 									creep.build(site);
 								} else {
-									const spawn = creep.pos.findClosestByRange(FIND_MY_STRUCTURES, {filter: structure => structure.structureType === STRUCTURE_SPAWN && structure.store.getFreeCapacity(RESOURCE_ENERGY)});
+									const spawn = creep.pos.findClosestByRange(FIND_MY_STRUCTURES, {filter: structure => [STRUCTURE_SPAWN, STRUCTURE_EXTENSION].indexOf(structure.structureType) !== -1 && structure.store.getFreeCapacity(RESOURCE_ENERGY)});
 									if (spawn) {
 										move(creep, spawn);
 										creep.transfer(spawn, RESOURCE_ENERGY);
