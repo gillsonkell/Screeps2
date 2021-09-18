@@ -5,6 +5,10 @@ Array.prototype.swap = function (x, y) {
 	return this;
 };
 
+if (!Memory.creepsSpawned) {
+	Memory.creepsSpawned = {};
+}
+
 const spawns = Object.values(Game.spawns);
 const creeps = Object.values(Game.creeps);
 const structures = Object.values(Game.structures);
@@ -100,6 +104,10 @@ try {
 
 for (const spawn of spawns) {
 	try {
+		if (!Memory.creepsSpawned[spawn.name]) {
+			Memory.creepsSpawned[spawn.name] = {};
+		}
+
 		spawn.queue = [];
 
 		spawn.sourceFlags = [];
@@ -120,15 +128,17 @@ for (const spawn of spawns) {
 				sourceFlag.carrierCarryPartsNeeded = Math.ceil(((sourceFlag.pathToController.cost + 5) * 2) * (sourceFlag.harvesterWorkPartsNeeded * HARVEST_POWER) / BODYPART_COST[CARRY]);
 
 				sourceFlag.harvesterWorkPartsQueued = 0;
+				sourceFlag.harvestersQueued = 0;
 				while (sourceFlag.harvesterWorkPartsQueued < sourceFlag.harvesterWorkPartsNeeded) {
 					const carry = 1;
 					const move = 1 + (spawn.room.energyCapacityAvailable >= 650 ? 1 : 0);
 					const work = Math.min(sourceFlag.harvesterWorkPartsNeeded - sourceFlag.harvesterWorkPartsQueued, Math.floor((spawn.room.energyCapacityAvailable - (carry * BODYPART_COST[CARRY]) - (move * BODYPART_COST[MOVE])) / BODYPART_COST[WORK]));
 					sourceFlag.harvesterWorkPartsQueued += work;
+					sourceFlag.harvestersQueued++;
 					spawn.queue.push({
 						type: 'h',
 						body: getBody({work, carry, move}),
-						idParts: [sourceFlag.name, sourceFlag.harvesterWorkPartsQueued],
+						idParts: [sourceFlag.name, sourceFlag.harvestersQueued],
 						backupTime: Math.ceil((sourceFlag.pathToController.cost + 3) * ((work + 1) / move)),
 						memory: {
 							sourceFlag: sourceFlag.name
@@ -137,13 +147,15 @@ for (const spawn of spawns) {
 				}
 
 				sourceFlag.carrierCarryPartsQueued = 0;
+				sourceFlag.carriersQueued = 0;
 				while (sourceFlag.carrierCarryPartsQueued < sourceFlag.carrierCarryPartsNeeded) {
 					const carry = Math.min(3, sourceFlag.carrierCarryPartsNeeded - sourceFlag.carrierCarryPartsQueued, Math.floor(spawn.room.energyCapacityAvailable / (BODYPART_COST[CARRY] + BODYPART_COST[MOVE])));
 					sourceFlag.carrierCarryPartsQueued += carry;
+					sourceFlag.carriersQueued++;
 					spawn.queue.push({
 						type: 'c',
 						body: getBody({carry, move: carry}),
-						idParts: [sourceFlag.name, sourceFlag.carrierCarryPartsQueued],
+						idParts: [sourceFlag.name, sourceFlag.carriersQueued],
 						backupTime: sourceFlag.pathToController.cost + 3,
 						memory: {
 							sourceFlag: sourceFlag.name
@@ -177,6 +189,52 @@ for (const spawn of spawns) {
 				new RoomVisual(sourceFlag.pos.roomName).text(`W${sourceFlag.harvesterWorkPartsNeeded} C${sourceFlag.carrierCarryPartsNeeded}`, sourceFlag.pos.x, sourceFlag.pos.y + 2);
 			} catch (error) {
 				console.log(error.stack);
+			}
+		}
+
+		if (spawn.name === '1') {
+			const myRooms = Object.values(Game.rooms).filter(room => room.controller && room.controller.my).length;
+			if (myRooms < Game.gcl.level && spawn.room.energyCapacityAvailable >= 1300) {
+				let spawnFlag;
+				let spawnName;
+				for (let i = 0; i < 10; i++) {
+					spawnFlag = Game.flags[`a ${i}`];
+					spawnName = i.toString();
+					if (spawnFlag && !Game.spawns[spawnName]) {
+						break;
+					} else {
+						spawnFlag = null;
+						spawnName = null;
+					}
+				}
+
+				if (spawnFlag) {
+					if (!spawnFlag.room || !spawnFlag.room.controller.my) {
+						spawn.queue.push({
+							type: 'a',
+							body: [MOVE, CLAIM],
+							memory: {
+								spawnFlag: spawnFlag.name
+							}
+						});
+					}
+
+					for (let i = 0; i < 4; i++) {
+						spawn.queue.push({
+							type: 's',
+							body: getBody({work: 5, carry: 5, move: 10}),
+							memory: {
+								spawnFlag: spawnFlag.name
+							}
+						});
+					}
+
+					if (spawnFlag.room) {
+						if (!spawnFlag.room.find(FIND_MY_STRUCTURES, {filter: structure => structure.structureType === STRUCTURE_SPAWN})[0]) {
+							spawnFlag.pos.createConstructionSite(STRUCTURE_SPAWN, spawnName);
+						}
+					}
+				}
 			}
 		}
 
@@ -295,11 +353,16 @@ for (const spawn of spawns) {
 			}
 			const identifier = idParts.join(',');
 
+			const creepLifeTime = (creep.body.indexOf(CLAIM) === -1 ? CREEP_LIFE_TIME : CREEP_CLAIM_LIFE_TIME);
+			if (Memory.creepsSpawned[spawn.name][identifier] && Memory.creepsSpawned[spawn.name][identifier] + creepLifeTime - backupTime > Game.time) {
+				continue;
+			}
+
 			if (spawn.creeps.find(creep => creep.identifier === identifier && creep.ticks > backupTime)) {
 				continue;
 			}
 
-			spawn.spawnCreep(creep.body, `${spawn.name} ${creep.type}${creepNumber} ${Game.time % CREEP_LIFE_TIME}`, {
+			const spawnResult = spawn.spawnCreep(creep.body, `${spawn.name} ${creep.type}${creepNumber} ${Game.time % CREEP_LIFE_TIME}`, {
 				memory: {
 					spawn: spawn.name,
 					type: creep.type,
@@ -308,6 +371,9 @@ for (const spawn of spawns) {
 					...creep.memory
 				}
 			});
+			if (spawnResult === OK) {
+				Memory.creepsSpawned[spawn.name][identifier] = Game.time;
+			}
 			break;
 		}
 
@@ -406,6 +472,50 @@ for (const spawn of spawns) {
 						}
 					}
 				}
+
+				if (creep.type === 'a') {
+					const spawnFlag = Game.flags[creep.memory.spawnFlag];
+					if (spawnFlag) {
+						if (creep.room === spawnFlag.room) {
+							move(creep, spawnFlag.room.controller);
+							creep.claimController(spawnFlag.room.controller);
+						} else {
+							move(creep, spawnFlag, {maxOps: 10000});
+						}
+					}
+				}
+
+				if (creep.type === 's') {
+					const spawnFlag = Game.flags[creep.memory.spawnFlag];
+					if (spawnFlag) {
+						if (creep.room === spawnFlag.room) {
+							if (creep.carrying) {
+								const site = creep.pos.findClosestByRange(FIND_MY_CONSTRUCTION_SITES);
+								if (site) {
+									if (!creep.pos.inRangeTo(site, 3)) {
+										move(creep, site);
+									}
+									creep.build(site);
+								} else {
+									const spawn = creep.pos.findClosestByRange(FIND_MY_STRUCTURES, {filter: structure => structure.structureType === STRUCTURE_SPAWN && structure.store.getFreeCapacity(RESOURCE_ENERGY)});
+									if (spawn) {
+										move(creep, spawn);
+										creep.transfer(spawn, RESOURCE_ENERGY);
+									} else {
+										move(creep, creep.room.controller);
+										creep.upgradeController(creep.room.controller);
+									}
+								}
+							} else {
+								const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE) || creep.pos.findClosestByRange(FIND_SOURCES_ACTIVE) || creep.pos.findClosestByRange(FIND_SOURCES);
+								move(creep, source);
+								creep.harvest(source);
+							}
+						} else {
+							move(creep, spawnFlag, {maxOps: 10000});
+						}
+					}
+				}
 			} catch (error) {
 				console.log(error.stack);
 			}
@@ -425,7 +535,7 @@ try {
 		const spawn = Game.spawns['1'];
 		if (spawn) {
 			const remainingTicks = 604800 - Game.time;
-			spawn.room.visual.text(Math.floor(remainingTicks / 1500) * (Memory.scores[0] - Memory.scores[1499]), spawn.room.controller.pos.x, spawn.room.controller.pos.y + 1);
+			spawn.room.visual.text((Math.floor(remainingTicks / 1500) * (Memory.scores[0] - Memory.scores[1499])).toLocaleString(), spawn.room.controller.pos.x, spawn.room.controller.pos.y + 1);
 		}
 	}
 } catch (error) {
