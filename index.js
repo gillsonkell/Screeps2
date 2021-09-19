@@ -92,8 +92,11 @@ try {
 		for (const name in names) {
 			const structureFlag = Game.flags[`${name} ${i + 1}`];
 			if (structureFlag && structureFlag.room) {
-				if (structureFlag.pos.createConstructionSite(names[name]) === OK) {
+				const site = structureFlag.pos.lookFor(LOOK_CONSTRUCTION_SITES, {filter: site => site.structureType === names[name]})[0];
+				if (site) {
 					structureFlag.remove();
+				} else {
+					structureFlag.pos.createConstructionSite(names[name]);
 				}
 			}
 		}
@@ -102,6 +105,7 @@ try {
 	console.log(error.stack);
 }
 
+const reservedRooms = {};
 for (const spawn of spawns) {
 	try {
 		if (!Memory.creepsSpawned[spawn.name]) {
@@ -118,7 +122,6 @@ for (const spawn of spawns) {
 			}
 		}
 
-		spawn.reservedRooms = [];
 		for (const sourceFlag of spawn.sourceFlags) {
 			try {
 				sourceFlag.pathToController = PathFinder.search(sourceFlag.pos, {pos: spawn.room.controller.pos, range: 1});
@@ -163,8 +166,8 @@ for (const spawn of spawns) {
 					});
 				}
 
-				if (sourceFlag.room !== spawn.room && !spawn.reservedRooms[sourceFlag.pos.roomName]) {
-					spawn.reservedRooms[sourceFlag.pos.roomName] = true;
+				if (sourceFlag.room !== spawn.room && !reservedRooms[sourceFlag.pos.roomName]) {
+					reservedRooms[sourceFlag.pos.roomName] = true;
 					const claimPartsNeeded = 2;
 					let claimPartsQueued = 0;
 					while (claimPartsQueued < claimPartsNeeded) {
@@ -287,9 +290,14 @@ for (const spawn of spawns) {
 		spawn.upgraderWorkPartsQueued = 0;
 		spawn.upgradersQueued = 0;
 		while (spawn.upgraderWorkPartsQueued < spawn.upgraderWorkPartsNeeded && spawn.upgradersQueued < spawn.upgraderPositions.length) {
+			let capacity = spawn.room.energyCapacityAvailable;
+			if (spawns.filter(filterSpawn => filterSpawn.room === spawn.room).length > 1) {
+				capacity = Math.ceil(capacity * .75);
+			}
+
 			const move = 1;
 			let carry = 1;
-			let work = Math.min(spawn.upgraderWorkPartsNeeded - spawn.upgraderWorkPartsQueued, Math.floor((spawn.room.energyCapacityAvailable - (move * BODYPART_COST[MOVE]) - (carry * BODYPART_COST[CARRY])) / BODYPART_COST[WORK]));
+			let work = Math.min(spawn.upgraderWorkPartsNeeded - spawn.upgraderWorkPartsQueued, Math.floor((capacity - (move * BODYPART_COST[MOVE]) - (carry * BODYPART_COST[CARRY])) / BODYPART_COST[WORK]));
 			while (carry < Math.ceil(work / 4)) {
 				work--;
 				carry += 2;
@@ -302,7 +310,7 @@ for (const spawn of spawns) {
 			});
 		}
 
-		if (spawn.creeps.length < 3) {
+		if (spawn.creeps.length < 3 && spawn.room.energyCapacity < 1300) {
 			const firstHarvesterIndex = spawn.queue.findIndex(creep => creep.type === 'h');
 			const firstHarvester = spawn.queue[firstHarvesterIndex];
 			const firstCarrierIndex = spawn.queue.findIndex(creep => creep.type === 'c');
