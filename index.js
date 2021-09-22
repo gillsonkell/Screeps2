@@ -287,6 +287,9 @@ for (const spawn of spawns) {
 		spawn.income = spawn.queue.reduce((income, creep) => income + (creep.type === 'h' ? creep.body.reduce((creepIncome, part) => creepIncome + (part === WORK ? 1 : 0), 0) : 0), 0) * HARVEST_POWER * CREEP_LIFE_TIME;
 		spawn.income = spawn.income * .785;
 		spawn.upgraderWorkPartsNeeded = Math.ceil(spawn.income / CREEP_LIFE_TIME);
+		if (spawn.room.controller.level >= 8) {
+			spawn.upgraderWorkPartsNeeded = Math.min(spawn.upgraderWorkPartsNeeded, 15);
+		}
 		spawn.upgraderWorkPartsQueued = 0;
 		spawn.upgradersQueued = 0;
 		while (spawn.upgraderWorkPartsQueued < spawn.upgraderWorkPartsNeeded && spawn.upgradersQueued < spawn.upgraderPositions.length) {
@@ -416,7 +419,7 @@ for (const spawn of spawns) {
 					if (creep.carrying) {
 						if (creep.room === spawn.room) {
 							if (creep.structure) {
-								move(creep, creep.structure, {reusePath: 0});
+								move(creep, creep.structure, {reusePath: 0, maxOps: 500});
 								creep.transfer(creep.structure, RESOURCE_ENERGY);
 							} else {
 								const upgrader = creep.pos.findClosestByPath(FIND_MY_CREEPS, {
@@ -424,14 +427,19 @@ for (const spawn of spawns) {
 									maxOps: spawn.upgraderMaxOps
 								});
 								if (upgrader) {
-									move(creep, upgrader);
+									move(creep, upgrader, {maxOps: 500});
 									creep.transfer(upgrader, RESOURCE_ENERGY);
 								} else {
-									move(creep, sourceFlag.pathToController.path[sourceFlag.pathToController.path.length - 5]);
+									if (creep.room.storage) {
+										move(creep, creep.room.storage);
+										creep.transfer(creep.room.storage, RESOURCES_ENERGY);
+									} else {
+										move(creep, sourceFlag.pathToController.path[sourceFlag.pathToController.path.length - 5], {maxOps: 500});
+									}
 								}
 							}
 						} else {
-							move(creep, spawn);
+							move(creep, spawn, {reusePath: 10});
 						}
 					} else {
 						if (sourceFlag) {
@@ -590,9 +598,11 @@ try {
 	console.log(error.stack);
 }
 
+console.log(Game.cpu.getUsed());
+
 function move(creep, pos, options) {
 	options = options || {};
-	options.maxOps = options.maxOps || 2000;
+	options.maxOps = options.maxOps || 1500;
 	creep.moveTo(pos, options);
 }
 
