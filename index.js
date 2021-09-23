@@ -432,7 +432,7 @@ for (const spawn of spawns) {
 								} else {
 									if (creep.room.storage) {
 										move(creep, creep.room.storage);
-										creep.transfer(creep.room.storage, RESOURCES_ENERGY);
+										creep.transfer(creep.room.storage, RESOURCE_ENERGY);
 									} else {
 										move(creep, sourceFlag.pathToController.path[sourceFlag.pathToController.path.length - 5], {maxOps: 500});
 									}
