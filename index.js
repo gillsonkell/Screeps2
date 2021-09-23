@@ -50,7 +50,7 @@ try {
 
 	for (let i = 0; i < 10; i++) {
 		for (const structure of structures) {
-			if ([STRUCTURE_SPAWN, STRUCTURE_EXTENSION, STRUCTURE_TOWER].indexOf(structure.structureType) !== -1) {
+			if ([STRUCTURE_SPAWN, STRUCTURE_EXTENSION, STRUCTURE_TOWER].indexOf(structure.structureType) !== -1 || (structure.structureType === STRUCTURE_TERMINAL && structure.store[RESOURCE_ENERGY] < 3000)) {
 				while (structure.needEnergy > 0) {
 					const range = (i === 9 ? 50 : i + 1);
 					const carrier = structure.pos.findClosestByRange(FIND_MY_CREEPS, {filter: carrier => carrier.type === 'c' && carrier.carrying && !carrier.structure && carrier.pos.inRangeTo(structure, range)});
@@ -205,6 +205,22 @@ for (const spawn of spawns) {
 				type: 'd',
 				body: getBody({attack, move: attack})
 			});
+		}
+
+		spawn.extractor = spawn.room.find(FIND_MY_STRUCTURES, {filter: structure => structure.structureType === STRUCTURE_EXTRACTOR})[0];
+		if (spawn.extractor && spawn.room.terminal && !spawn.extractor.taken && ['10', '5'].indexOf(spawn.name) !== -1) {
+			spawn.extractor.taken = true;
+			spawn.queue.push({
+				type: 'eh',
+				body: getBody({work: 5, carry: 2, move: 1})
+			});
+
+			for (let i = 0; i < 2; i++) {
+				spawn.queue.push({
+					type: 'ec',
+					body: getBody({carry: 3, move: 3})
+				});
+			}
 		}
 
 		if (spawn.name === '1') {
@@ -572,6 +588,28 @@ for (const spawn of spawns) {
 						}
 					}
 				}
+
+				if (creep.type === 'eh') {
+					if (spawn.extractor) {
+						move(creep, spawn.extractor);
+						creep.harvest(spawn.extractor.pos.lookFor(LOOK_MINERALS)[0]);
+					}
+				}
+
+				if (creep.type === 'ec') {
+					if (creep.memory.carrying) {
+						if (spawn.room.terminal) {
+							move(creep, spawn.room.terminal);
+							transferAll(creep, spawn.room.terminal);
+						}
+					} else {
+						const harvester = spawn.room.find(FIND_MY_CREEPS, {filter: harvester => harvester.type === 'eh'})[0];
+						if (harvester) {
+							move(creep, harvester);
+							transferAll(harvester, creep);
+						}
+					}
+				}
 			} catch (error) {
 				console.log(error.stack);
 			}
@@ -598,7 +636,7 @@ try {
 	console.log(error.stack);
 }
 
-console.log(Game.cpu.getUsed());
+//console.log(Game.cpu.getUsed());
 
 function move(creep, pos, options) {
 	options = options || {};
@@ -612,4 +650,11 @@ function getBody(parts) {
 		body.push(...Array(parts[key]).fill(key));
 	}
 	return body;
+}
+
+function transferAll(creep, target) {
+	for (const resource in creep.store) {
+		creep.transfer(target, resource);
+		break;
+	}
 }
