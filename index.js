@@ -113,6 +113,15 @@ for (const spawn of spawns) {
 		}
 
 		spawn.queue = [];
+		
+		/*
+		if (spawn.name === '8') {
+		    spawn.queue.push({
+		        type: 'tc',
+		        body: [MOVE, CLAIM]
+		    });
+		}
+		*/
 
 		spawn.sourceFlags = [];
 		for (let i = 0; i < 20; i++) {
@@ -609,6 +618,11 @@ for (const spawn of spawns) {
 							transferAll(harvester, creep);
 						}
 					}
+				}
+				
+				if (creep.type === 'tc') {
+				    move(creep, creep.room.controller);
+				    creep.claimController(creep.room.controller);
 				}
 			} catch (error) {
 				console.log(error.stack);
